@@ -1,0 +1,69 @@
+# Node modules
+node_modules/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory
+coverage/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor folders
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# Temporary files
+tmp/
+temp/
+
+# Package lock (optional, tergantung tim)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Debug
+*.tsbuildinfo
+
+# Uploads (kalau ada folder upload file)
+uploads/
+public/uploads/
+
+# Test output
+jest-stare/
+junit.xml
+
+# PM2
+.pm2/

@@ -16,8 +16,29 @@ function parseLinkedinRichData(rich_data) {
 }
 
 async function getAllAlumni(req, res) {
-  const data = await Alumni.findAll();
-  res.json(data);
+  console.log("ambil semua data alumni dengan pagination!");
+
+  try {
+    const page = parseInt(req.query.page) || 1;      // default page 1
+    const limit = parseInt(req.query.limit) || 20;   // default 20 data per page
+    const offset = (page - 1) * limit;
+
+    const { count, rows } = await Alumni.findAndCountAll({
+      limit,
+      offset,
+      order: [["id", "ASC"]], // optional, biar konsisten
+    });
+
+    res.json({
+      currentPage: page,
+      totalPages: Math.ceil(count / limit),
+      totalData: count,
+      data: rows,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Terjadi error", error });
+  }
 }
 
 async function getAllTrackedData(req, res) {

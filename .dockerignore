@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+sessions/*.json
+!sessions/facebookSession.json
+!sessions/instagramSession.json
+!sessions/linkedinSession.json
+!sessions/tiktokSession.json
+tes.html
+tes/
+sessions.zip

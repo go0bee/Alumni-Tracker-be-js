@@ -1,0 +1,99 @@
+{
+  "cookies": [
+    {
+      "name": "csrftoken",
+      "value": "jkmhObiA0f7nyMMH6iSqpU",
+      "domain": ".instagram.com",
+      "path": "/",
+      "expires": 1811391134.384699,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "datr",
+      "value": "nkroaa-gMvOaeHNENoSXt59j",
+      "domain": ".instagram.com",
+      "path": "/",
+      "expires": 1811391134.384819,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "ig_did",
+      "value": "E006775B-0B74-43D0-8139-04F19B432A28",
+      "domain": ".instagram.com",
+      "path": "/",
+      "expires": 1808367134.384842,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "mid",
+      "value": "aehKngALAAGb3yg4D1WgTX9sAmbI",
+      "domain": ".instagram.com",
+      "path": "/",
+      "expires": 1811391134.384863,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "dpr",
+      "value": "1.0000000149011612",
+      "domain": ".instagram.com",
+      "path": "/",
+      "expires": 1777435934,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "wd",
+      "value": "1280x720",
+      "domain": ".instagram.com",
+      "path": "/",
+      "expires": 1777435934,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://www.instagram.com",
+      "localStorage": [
+        {
+          "name": "chatd-deviceid",
+          "value": "9bb3401b-05e0-4839-86fc-93b98a15755c"
+        },
+        {
+          "name": "hb_timestamp",
+          "value": "1776831164986"
+        },
+        {
+          "name": "IGSession",
+          "value": "nr00nm:1776832955797"
+        },
+        {
+          "name": "signal_flush_timestamp",
+          "value": "1776831135002"
+        },
+        {
+          "name": "Session",
+          "value": "vuxdut:1776831190796"
+        },
+        {
+          "name": "banzai:last_storage_flush",
+          "value": "1776831135750.5"
+        },
+        {
+          "name": "caa_feta_onetap_users_migrated",
+          "value": "true"
+        }
+      ]
+    }
+  ]
+}

@@ -17,6 +17,7 @@ async function duckSearch(query) {
   const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
 
   const res = await axios.get(url, {
+    timeout: 15000,
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
@@ -64,7 +65,8 @@ async function browserSearch(query) {
   const baseUrl = "https://duckduckgo.com/?q=";
 
   function buildQuery(nama) {
-    return `"${nama}" site:linkedin.com/in ("UMM" OR "Universitas Muhammadiyah Malang")`;
+    // return `"${nama}" site:linkedin.com/in ("UMM" OR "Universitas Muhammadiyah Malang")`;
+    return `"${nama}" site:linkedin.com/in`;
   }
 
   const sQuery = buildQuery(query);
@@ -143,10 +145,17 @@ async function scrapeLinkedInProfile(context, url) {
   try {
     await page.goto(url, {
       waitUntil: "domcontentloaded",
-      timeout: 15000,
+      timeout: 30000,
     });
 
     const currentUrl = page.url();
+    const title = await page.title();
+
+    if (title.includes("LinkedIn") && title.includes("Security Verification")) {
+      return null;
+    }
+
+    // const currentUrl = page.url();
     if (currentUrl.includes("authwall") || currentUrl.includes("login")) {
       console.log("🚫 Authwall:", url);
       await page.close();
@@ -154,50 +163,45 @@ async function scrapeLinkedInProfile(context, url) {
     }
     console.log("lolos dari authwall");
 
-    await page.waitForTimeout(2000);
-    await page.mouse.move(200, 200);
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(20000);
+    // await page.mouse.move(500, 200);
+    // await page.waitForTimeout(5000);
 
-    await page.evaluate(async () => {
-      await new Promise((resolve) => {
-        let lastHeight = 0;
-        let sameCount = 0;
+    await page.waitForSelector("main", { timeout: 15000 });
 
-        const timer = setInterval(() => {
-          window.scrollBy(0, 400);
+    // await page.evaluate(async () => {
+    //   await new Promise((resolve) => {
+    //     let lastHeight = 0;
+    //     let sameCount = 0;
 
-          const newHeight = document.body.scrollHeight;
+    //     const timer = setInterval(() => {
+    //       window.scrollBy(0, 400);
 
-          if (newHeight === lastHeight) {
-            sameCount++;
-          } else {
-            sameCount = 0;
-          }
+    //       const newHeight = document.body.scrollHeight;
 
-          lastHeight = newHeight;
+    //       if (newHeight === lastHeight) {
+    //         sameCount++;
+    //       } else {
+    //         sameCount = 0;
+    //       }
 
-          // 🔥 kalau 3x gak nambah → stop
-          if (sameCount >= 3) {
-            clearInterval(timer);
-            resolve();
-          }
-        }, 500);
-      });
-    });
+    //       lastHeight = newHeight;
 
-    await page.waitForTimeout(1500);
+    //       // 🔥 kalau 3x gak nambah → stop
+    //       if (sameCount >= 3) {
+    //         clearInterval(timer);
+    //         resolve();
+    //       }
+    //     }, 500);
+    //   });
+    // });
 
-    console.log("baca title ama description");
+    // await page.waitForTimeout(1500);
+
+    // console.log("baca title ama description");
     const data = await page.evaluate(() => {
       const getMeta = (prop) =>
         document.querySelector(`meta[property="${prop}"]`)?.content || "";
-
-      // console.log(
-      //   "done dapet: \ntitle:" +
-      //     getMeta("og:title") +
-      //     "description: " +
-      //     getMeta("og:description"),
-      // );
 
       return {
         title: getMeta("og:title"),
@@ -209,18 +213,19 @@ async function scrapeLinkedInProfile(context, url) {
       await page.close();
       return null;
     }
+    // const bodyText = await page.textContent("body");
+    // if (bodyText?.includes("error 999")) return null;
+    // const html = await page.content();
 
-    const html = await page.content();
-
-    if (
-      html.includes("error 999") ||
-      html.includes("You’re out of requests") ||
-      html.includes("Request blocked")
-    ) {
-      console.log("🚫 LinkedIn blocked (999).");
-      await page.close();
-      return null;
-    }
+    // if (
+    //   html.includes("error 999") ||
+    //   html.includes("You’re out of requests") ||
+    //   html.includes("Request blocked")
+    // ) {
+    //   console.log("🚫 LinkedIn blocked (999).");
+    //   await page.close();
+    //   return null;
+    // }
 
     // try {
     //   await page.waitForFunction(
@@ -245,40 +250,63 @@ async function scrapeLinkedInProfile(context, url) {
     // }
 
     console.log("saatnya");
-    const cards = await Promise.race([
-      page.evaluate(() => {
-        console.log("start find expirience and study");
-        const getSection = (keywords) => {
-          const sections = Array.from(document.querySelectorAll("main"));
+    const cards = await page.evaluate(() => {
+      const expSection =
+        document.querySelector('section[data-section="experience"]') ||
+        document.querySelector("section.pp-section.experience");
+      const eduSection =
+        document.querySelector('section[data-section="educationsDetails"]') ||
+        document.querySelector("section.education");
 
-          return sections.find((sec) =>
-            keywords.some((k) =>
-              sec.textContent.toLowerCase().includes(k.toLowerCase()),
-            ),
-          );
-        };
+      const parseExperience = (section) => {
+        if (!section) return [];
 
-        const extractItems = (section) => {
-          if (!section) return [];
+        return Array.from(
+          section.querySelectorAll(
+            "li.experience-item, li.experience-group-position",
+          ),
+        )
+          .map((el) => {
+            const normalize = (t) => (t || "").replace(/\s+/g, " ").trim();
 
-          return Array.from(section.querySelectorAll("li"))
-            .map((el) => {
-              const text = el.textContent.replace(/\n/g, " ").trim();
-              return text.length > 20 ? text : null;
-            })
-            .filter(Boolean)
-            .slice(0, 5); // limit biar gak noise
-        };
+            const title = normalize(
+              el.querySelector(".experience-item__title")?.innerText,
+            );
+            const company = normalize(
+              el.querySelector(".experience-item__subtitle")?.innerText,
+            );
+            const date = normalize(el.querySelector(".date-range")?.innerText);
 
-        return {
-          education: extractItems(getSection(["education", "pendidikan"])),
-          experience: extractItems(getSection(["experience", "pengalaman"])),
-        };
-      }),
-      new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("EVALUATE_TIMEOUT")), 800);
-      }),
-    ]);
+            return { title, company, date };
+          })
+          .filter((x) => x.title || x.company)
+          .slice(0, 5);
+      };
+
+      const parseEducation = (section) => {
+        if (!section) return [];
+
+        return Array.from(section.querySelectorAll("li.education__list-item"))
+          .map((el) => {
+            const school =
+              el.querySelector("h3 a span")?.innerText?.trim() ||
+              el.querySelector("h3")?.innerText?.trim() ||
+              "";
+
+            const date =
+              el.querySelector(".date-range")?.innerText?.trim() || "";
+
+            return { school, date };
+          })
+          .filter((x) => x.school)
+          .slice(0, 5);
+      };
+
+      return {
+        experience: parseExperience(expSection),
+        education: parseEducation(eduSection),
+      };
+    });
     console.log("cards:", cards);
 
     console.log("done");
@@ -301,10 +329,17 @@ async function searchWithEnrichment(query) {
   const { source, results } = await smartSearch(query);
 
   // 🔥 SATU browser doang
-  const browser = await chromium.launch({ headless: false });
+  const browser = await chromium.launch({
+    headless: process.env.HEADLESS !== "false",
+  });
 
   const context = await browser.newContext({
     storageState: "sessions/linkedinSession.json",
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+    viewport: { width: 1280, height: 800 },
+    locale: "id-ID",
+    timezoneId: "Asia/Jakarta",
     ignoreHTTPSErrors: true,
   });
 

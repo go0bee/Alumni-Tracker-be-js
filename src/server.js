@@ -3,7 +3,7 @@ const app = require("./app");
 const sequelize = require("./db");
 require("./models"); // associations
 
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 8005;
 
 async function startServer() {
   try {

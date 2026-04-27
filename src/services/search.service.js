@@ -1,96 +1,72 @@
-const axios = require("axios");
-const cheerio = require("cheerio");
-const { chromium } = require("playwright");
 const he = require("he");
+const fs = require("fs");
+const path = require("path");
 
-// ================= CAPTCHA DETECT =================
-function isCaptcha(html) {
-  return (
-    html.includes("anomaly") ||
-    html.includes("captcha") ||
-    html.includes("Select all squares")
-  );
+const { chromium } = require("playwright-extra");
+// const StealthPlugin = require("playwright-extra-plugin-stealth");
+const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+chromium.use(StealthPlugin());
+
+// ================== CONFIG ==================
+const HEADLESS = process.env.HEADLESS !== "false"; // default true
+const LINKEDIN_SESSION_PATH = path.join(
+  process.cwd(),
+  "sessions",
+  "linkedinSession.json",
+);
+
+// ================== HELPERS ==================
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
-// ================= DUCK SEARCH =================
-async function duckSearch(query) {
-  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-
-  const res = await axios.get(url, {
-    timeout: 15000,
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-    },
-  });
-
-  if (isCaptcha(res.data)) {
-    throw new Error("CAPTCHA_DETECTED");
-  }
-
-  const $ = cheerio.load(res.data);
-  const results = [];
-
-  $(".result").each((i, el) => {
-    const title = $(el).find(".result__a").text();
-    const link = $(el).find(".result__a").attr("href");
-    const snippet = $(el).find(".result__snippet").text();
-
-    if (title && link) {
-      results.push({
-        title,
-        link,
-        snippet: he.decode(snippet || ""),
-      });
-    }
-  });
-
-  return results;
+function random(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// ================= PLAYWRIGHT SEARCH =================
-async function browserSearch(query) {
-  const browser = await chromium.launch({ headless: false });
+function filterSocialLinks(results, platform) {
+  return results.filter((r) => {
+    const link = r.link || "";
 
-  const context = await browser.newContext({
-    userAgent:
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-    viewport: { width: 1280, height: 800 },
-    locale: "id-ID",
-    timezoneId: "Asia/Jakarta",
-    ignoreHTTPSErrors: true,
+    if (platform === "linkedin") return link.includes("linkedin.com/in/");
+    if (platform === "instagram")
+      return link.match(/^https?:\/\/(www\.)?instagram\.com\/[^\/]+\/?$/);
+
+    if (platform === "tiktok")
+      return link.match(/^https?:\/\/(www\.)?tiktok\.com\/@[^\/]+\/?$/);
+
+    if (platform === "facebook")
+      return link.match(/^https?:\/\/(www\.)?facebook\.com\/[^\/]+\/?$/);
+
+    return true;
   });
+}
 
-  const page = await context.newPage();
+function buildQuery(query, platform) {
+  if (platform === "linkedin") return `"${query}" site:linkedin.com/in`;
+  if (platform === "instagram") return `"${query}" site:instagram.com`;
+  if (platform === "tiktok") return `"${query}" site:tiktok.com`;
+  if (platform === "facebook") return `"${query}" site:facebook.com`;
+
+  return `"${query}"`;
+}
+
+// ================== PLAYWRIGHT SEARCH ==================
+async function browserSearch(page, query, platform) {
   const baseUrl = "https://duckduckgo.com/?q=";
-
-  function buildQuery(nama) {
-    // return `"${nama}" site:linkedin.com/in ("UMM" OR "Universitas Muhammadiyah Malang")`;
-    return `"${nama}" site:linkedin.com/in`;
-  }
-
-  const sQuery = buildQuery(query);
+  const sQuery = buildQuery(query, platform);
 
   await page.goto(`${baseUrl}${encodeURIComponent(sQuery)}`, {
     waitUntil: "domcontentloaded",
-    timeout: 20000,
+    timeout: 30000,
   });
 
-  // await page.goto(`https://duckduckgo.com/?q=${encodeURIComponent(query)}`, {
-  //   waitUntil: "networkidle",
-  // });
-
-  // await page.goto(`${url}${encodeURIComponent(query)}`, {
-  //   waitUntil: "networkidle",
-  //   timeout: 3000,
-  // });
-
-  // await page.goto(`${url}${encodeURIComponent(query)}`, {
-  //   waitUntil: "domcontentloaded",
-  //   timeout: 20000,
-  // });
-
-  await page.waitForTimeout(2000);
+  // human-ish behavior
+  await page.waitForTimeout(random(1000, 2000));
+  await page.mouse.move(random(200, 800), random(200, 500));
+  await page.waitForTimeout(random(500, 1500));
+  await page.mouse.wheel(0, random(500, 1200));
+  await page.waitForTimeout(random(1000, 2000));
 
   const results = await page.$$eval("article", (nodes) =>
     nodes
@@ -106,10 +82,8 @@ async function browserSearch(query) {
           snippet: snippetEl?.innerText || "",
         };
       })
-      .filter((item) => item.link.includes("/in/")),
+      .filter((x) => x.link),
   );
-
-  await browser.close();
 
   return results.map((r) => ({
     ...r,
@@ -117,19 +91,39 @@ async function browserSearch(query) {
   }));
 }
 
-// ================= SMART SEARCH =================
-async function smartSearch(query) {
-  try {
-    const results = await duckSearch(query);
+// ================== MULTI SOCIAL SEARCH ==================
+async function multiSocialSearch(query) {
+  const platforms = ["linkedin", "instagram", "tiktok", "facebook"];
+  const allResults = {};
 
-    if (!results.length) throw new Error("EMPTY");
+  const browser = await chromium.launch({ headless: HEADLESS });
+  const context = await browser.newContext({
+    userAgent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+    viewport: { width: 1280, height: 800 },
+    locale: "id-ID",
+    timezoneId: "Asia/Jakarta",
+    ignoreHTTPSErrors: true,
+  });
 
-    return { source: "axios", results };
-  } catch (err) {
-    console.log("Fallback ke browser:", err.message);
-    const results = await browserSearch(query);
-    return { source: "playwright", results };
+  const page = await context.newPage();
+
+  for (const platform of platforms) {
+    console.log(`🔎 Searching platform: ${platform}`);
+
+    try {
+      const results = await browserSearch(page, query, platform);
+      allResults[platform] = filterSocialLinks(results, platform);
+
+      await sleep(random(2000, 4000));
+    } catch (err) {
+      console.log(`❌ Search error ${platform}:`, err.message);
+      allResults[platform] = [];
+    }
   }
+
+  await browser.close();
+  return allResults;
 }
 
 // ================= LINKEDIN SCRAPER =================
@@ -140,8 +134,6 @@ async function scrapeLinkedInProfile(context, url) {
     console.log("🌐 BROWSER LOG:", msg.text());
   });
 
-  console.log("start find data linkedin");
-
   try {
     await page.goto(url, {
       waitUntil: "domcontentloaded",
@@ -151,54 +143,35 @@ async function scrapeLinkedInProfile(context, url) {
     const currentUrl = page.url();
     const title = await page.title();
 
-    if (title.includes("LinkedIn") && title.includes("Security Verification")) {
+    // security check
+    if (
+      title.toLowerCase().includes("security verification") ||
+      currentUrl.includes("checkpoint")
+    ) {
+      await page.close();
       return null;
     }
 
-    // const currentUrl = page.url();
+    // authwall
     if (currentUrl.includes("authwall") || currentUrl.includes("login")) {
       console.log("🚫 Authwall:", url);
       await page.close();
       return null;
     }
-    console.log("lolos dari authwall");
 
-    await page.waitForTimeout(20000);
-    // await page.mouse.move(500, 200);
-    // await page.waitForTimeout(5000);
+    const html = await page.content();
+    if (
+      html.includes("error 999") ||
+      html.includes("Request blocked") ||
+      html.includes("You’re out of requests")
+    ) {
+      console.log("🚫 LinkedIn blocked (999).");
+      await page.close();
+      return null;
+    }
 
-    await page.waitForSelector("main", { timeout: 15000 });
+    await page.waitForTimeout(random(3000, 6000));
 
-    // await page.evaluate(async () => {
-    //   await new Promise((resolve) => {
-    //     let lastHeight = 0;
-    //     let sameCount = 0;
-
-    //     const timer = setInterval(() => {
-    //       window.scrollBy(0, 400);
-
-    //       const newHeight = document.body.scrollHeight;
-
-    //       if (newHeight === lastHeight) {
-    //         sameCount++;
-    //       } else {
-    //         sameCount = 0;
-    //       }
-
-    //       lastHeight = newHeight;
-
-    //       // 🔥 kalau 3x gak nambah → stop
-    //       if (sameCount >= 3) {
-    //         clearInterval(timer);
-    //         resolve();
-    //       }
-    //     }, 500);
-    //   });
-    // });
-
-    // await page.waitForTimeout(1500);
-
-    // console.log("baca title ama description");
     const data = await page.evaluate(() => {
       const getMeta = (prop) =>
         document.querySelector(`meta[property="${prop}"]`)?.content || "";
@@ -209,54 +182,21 @@ async function scrapeLinkedInProfile(context, url) {
       };
     });
 
-    if (!data.title || data.title.includes("Sign Up")) {
+    if (!data.title || data.title.toLowerCase().includes("sign up")) {
       await page.close();
       return null;
     }
-    // const bodyText = await page.textContent("body");
-    // if (bodyText?.includes("error 999")) return null;
-    // const html = await page.content();
 
-    // if (
-    //   html.includes("error 999") ||
-    //   html.includes("You’re out of requests") ||
-    //   html.includes("Request blocked")
-    // ) {
-    //   console.log("🚫 LinkedIn blocked (999).");
-    //   await page.close();
-    //   return null;
-    // }
-
-    // try {
-    //   await page.waitForFunction(
-    //     () => {
-    //       console.log("cari scroll dikit");
-    //       const text = document.body.innerText.toLowerCase();
-
-    //       return [
-    //         "experience",
-    //         "pengalaman",
-    //         "erfaring",
-    //         "expérience",
-    //         "Pendidikan",
-    //       ].some((k) => text.includes(k));
-    //     },
-    //     { timeout: 8000 },
-    //   );
-    // } catch (e) {
-    //   console.log(
-    //     "⚠️ Section experience/education gak ketemu, lanjut meta aja",
-    //   );
-    // }
-
-    console.log("saatnya");
     const cards = await page.evaluate(() => {
       const expSection =
         document.querySelector('section[data-section="experience"]') ||
         document.querySelector("section.pp-section.experience");
+
       const eduSection =
         document.querySelector('section[data-section="educationsDetails"]') ||
         document.querySelector("section.education");
+
+      const normalize = (t) => (t || "").replace(/\s+/g, " ").trim();
 
       const parseExperience = (section) => {
         if (!section) return [];
@@ -267,8 +207,6 @@ async function scrapeLinkedInProfile(context, url) {
           ),
         )
           .map((el) => {
-            const normalize = (t) => (t || "").replace(/\s+/g, " ").trim();
-
             const title = normalize(
               el.querySelector(".experience-item__title")?.innerText,
             );
@@ -307,9 +245,7 @@ async function scrapeLinkedInProfile(context, url) {
         education: parseEducation(eduSection),
       };
     });
-    console.log("cards:", cards);
 
-    console.log("done");
     await page.close();
 
     return {
@@ -326,33 +262,38 @@ async function scrapeLinkedInProfile(context, url) {
 
 // ================= MAIN PIPELINE =================
 async function searchWithEnrichment(query) {
-  const { source, results } = await smartSearch(query);
+  const allResults = await multiSocialSearch(query);
 
-  // 🔥 SATU browser doang
-  const browser = await chromium.launch({
-    headless: process.env.HEADLESS !== "false",
-  });
+  const linkedinResults = (allResults.linkedin || []).slice(0, 5);
+  const enrichedLinkedin = [];
 
-  const context = await browser.newContext({
-    storageState: "sessions/linkedinSession.json",
+  // LinkedIn enrichment browser
+  const browser = await chromium.launch({ headless: HEADLESS });
+
+  const contextOptions = {
     userAgent:
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
     viewport: { width: 1280, height: 800 },
     locale: "id-ID",
     timezoneId: "Asia/Jakarta",
     ignoreHTTPSErrors: true,
-  });
+  };
 
-  const limited = results.slice(0, 3);
-  const enriched = [];
+  // load session if exists
+  if (fs.existsSync(LINKEDIN_SESSION_PATH)) {
+    contextOptions.storageState = LINKEDIN_SESSION_PATH;
+  } else {
+    console.log("⚠️ LinkedIn session file not found:", LINKEDIN_SESSION_PATH);
+  }
 
-  for (const item of limited) {
-    console.log("🔎 Scrape:", item.link);
+  const context = await browser.newContext(contextOptions);
 
-    // 👇 kirim context, bukan bikin baru
+  for (const item of linkedinResults) {
+    console.log("🔎 Scrape LinkedIn:", item.link);
+
     const profile = await scrapeLinkedInProfile(context, item.link);
 
-    enriched.push({
+    enrichedLinkedin.push({
       ...item,
       rich_data: profile || {
         title: item.title,
@@ -364,16 +305,25 @@ async function searchWithEnrichment(query) {
       },
     });
 
-    await new Promise((r) => setTimeout(r, 1000 + Math.random() * 2000));
+    await sleep(random(5000, 10000)); // slow down, biar gak 999
   }
 
   await browser.close();
 
   return {
     query,
-    source,
-    total: enriched.length,
-    results: enriched,
+    total: {
+      linkedin: enrichedLinkedin.length,
+      instagram: (allResults.instagram || []).length,
+      tiktok: (allResults.tiktok || []).length,
+      facebook: (allResults.facebook || []).length,
+    },
+    results: {
+      linkedin: enrichedLinkedin,
+      instagram: allResults.instagram || [],
+      tiktok: allResults.tiktok || [],
+      facebook: allResults.facebook || [],
+    },
   };
 }
 

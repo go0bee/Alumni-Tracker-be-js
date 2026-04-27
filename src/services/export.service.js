@@ -20,6 +20,7 @@ async function exportAlumniToExcel() {
       FROM alumni a
       LEFT JOIN alumni_tracking_results atr 
         ON a.id = atr.target_id
+      WHERE a.is_tracked = true
     `;
 
     const [rows] = await db.query(query);

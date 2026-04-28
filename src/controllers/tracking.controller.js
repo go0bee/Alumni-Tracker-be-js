@@ -202,7 +202,7 @@ async function runTrackingSocial(req, res) {
     if (
       linkedinResults.length ||
       instagramResults.length ||
-      instagramResults.length ||
+      facebookResults.length ||
       tiktokResults.length
     ) {
       const newTrackingResult = await AlumniTrackingResult.create({
@@ -292,9 +292,16 @@ async function runTrackingSocialBatch(req, res) {
 
     for (const alumni of alumniList) {
       console.log(`🚀 Tracking alumni: ${alumni.id} - ${alumni.nama}`);
-
+      
       try {
+        console.log("START SCRAPING:", alumni.nama);
         const scraper_output = await searchWithEnrichment(alumni.nama);
+
+        console.log("SCRAPER OUTPUT:", scraper_output);
+        if (!scraper_output) {
+          throw new Error("Scraper gagal total (null response)");
+        }
+        
 
         const results = scraper_output.results || {};
         const linkedinResults = results.linkedin || [];
@@ -335,7 +342,7 @@ async function runTrackingSocialBatch(req, res) {
 
             // experience
             if (bestLinkedin.rich_data?.cards?.experience?.length) {
-              const exp = bestLinkedin.rich_data.cards.experience[0];
+              const exp = topLinkedin?.rich_data?.cards?.experience?.[0];
               newTrackingResult.posisi_kerja = exp.title || null;
               newTrackingResult.tempat_kerja = exp.company || null;
             }
@@ -368,7 +375,7 @@ async function runTrackingSocialBatch(req, res) {
 
         alumni.is_tracked = true;
         await alumni.save();
-
+        
         success++;
         logs.push({
           id: alumni.id,
@@ -397,6 +404,7 @@ async function runTrackingSocialBatch(req, res) {
       logs,
     });
   } catch (err) {
+    console.error("RUN TRACKING SOCIAL ERROR:", err);
     return res.status(500).json({
       status: "error",
       detail: err.message,

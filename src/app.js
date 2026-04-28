@@ -17,6 +17,10 @@ app.use(
 );
 app.use(express.json());
 
+console.log("ENV CHECK:", {
+  MYSQL_URL: process.env.MYSQL_URL,
+});
+
 app.use("/admin", adminRoutes);
 app.use("/", trackingRoutes);
 app.use("/search", searchRoute);

@@ -265,7 +265,7 @@ async function runTrackingSocial(req, res) {
 
 async function runTrackingSocialBatch(req, res) {
   try {
-    const limit = parseInt(req.query.limit || "50");
+    const limit = parseInt(req.query.limit || "10");
     const delay = parseInt(req.query.delay || "5000"); // ms
 
     if (limit < 1 || limit > 1000) {

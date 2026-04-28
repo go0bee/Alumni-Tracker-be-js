@@ -10,16 +10,16 @@ const app = express();
 // app.use(cors({ origin: "*" }));
 app.use(
   cors({
-    origin: "https://tracker-alumni.up.railway.app",
+    origin: ["https://tracker-alumni.up.railway.app", "http://localhost:5173"],
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true,
   }),
 );
 app.use(express.json());
 
-console.log("ENV CHECK:", {
-  MYSQL_URL: process.env.MYSQL_URL,
-});
+// console.log("ENV CHECK:", {
+//   MYSQL_URL: process.env.MYSQL_URL,
+// });
 
 app.use("/admin", adminRoutes);
 app.use("/", trackingRoutes);

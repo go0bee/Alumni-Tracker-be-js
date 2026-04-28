@@ -1,10 +1,10 @@
-const express = require("express");
-const multer = require("multer");
-const { importExcelAlumni } = require("../controllers/admin.controller");
+    const express = require("express");
+    const multer = require("multer");
+    const { importExcelAlumni } = require("../controllers/admin.controller");
 
-const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
+    const router = express.Router();
+    const upload = multer({ storage: multer.memoryStorage() });
 
-router.post("/import-excel", upload.single("file"), importExcelAlumni);
+    router.post("/import-excel", upload.single("file"), importExcelAlumni);
 
-module.exports = router;
+    module.exports = router;

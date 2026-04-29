@@ -182,10 +182,17 @@ async function runTrackingSocial(req, res) {
       return res.status(404).json({ detail: "Alumni tidak ditemukan" });
     }
 
+    // kalau sudah pernah ditrack, return data tracking yg ada di DB
     if (target.is_tracked) {
+      const existingTracking = await AlumniTrackingResult.findOne({
+        where: { target_id: target.id },
+        order: [["createdAt", "DESC"]],
+      });
+
       return res.json({
         message: "Alumni sudah pernah ditrack",
         id: target.id,
+        tracking_result: existingTracking || null,
       });
     }
 
@@ -198,6 +205,8 @@ async function runTrackingSocial(req, res) {
     const facebookResults = results.facebook || [];
     const tiktokResults = results.tiktok || [];
 
+    let savedTrackingResult = null;
+
     // kalau ada hasil apapun, simpan tracking result
     if (
       linkedinResults.length ||
@@ -205,55 +214,53 @@ async function runTrackingSocial(req, res) {
       facebookResults.length ||
       tiktokResults.length
     ) {
-      const newTrackingResult = await AlumniTrackingResult.create({
+      savedTrackingResult = await AlumniTrackingResult.create({
         target_id: target.id,
       });
 
       if (linkedinResults.length) {
         const topLinkedin = linkedinResults[0];
-        newTrackingResult.link_linkedin = topLinkedin.link;
+        savedTrackingResult.link_linkedin = topLinkedin.link;
 
         // experience
         if (topLinkedin.rich_data?.cards?.experience?.length) {
           const exp = topLinkedin.rich_data.cards.experience[0];
-          newTrackingResult.posisi_kerja = exp.title || null;
-          newTrackingResult.tempat_kerja = exp.company || null;
+          savedTrackingResult.posisi_kerja = exp.title || null;
+          savedTrackingResult.tempat_kerja = exp.company || null;
         }
 
         // education UMM priority
         const edu = pickBestEducation(topLinkedin);
-
         if (edu) {
-          newTrackingResult.pendidikan = edu.school || null; // pastikan field ini ada di tabel
-          newTrackingResult.tahun_pendidikan = edu.date || null; // pastikan field ini ada
+          savedTrackingResult.pendidikan = edu.school || null;
+          savedTrackingResult.tahun_pendidikan = edu.date || null;
         }
       }
 
       if (instagramResults.length) {
-        newTrackingResult.link_instagram = instagramResults[0].link;
+        savedTrackingResult.link_instagram = instagramResults[0].link;
       }
 
       if (facebookResults.length) {
-        newTrackingResult.link_facebook = facebookResults[0].link;
+        savedTrackingResult.link_facebook = facebookResults[0].link;
       }
 
       if (tiktokResults.length) {
-        newTrackingResult.link_tiktok = tiktokResults[0].link;
+        savedTrackingResult.link_tiktok = tiktokResults[0].link;
       }
 
-      await newTrackingResult.save();
+      await savedTrackingResult.save();
     }
 
     // update status tracked
     target.is_tracked = true;
     await target.save();
 
+    // return yang beneran masuk DB
     return res.json({
       status: "success",
-      detail: {
-        total: scraper_output.total,
-        results: scraper_output.results,
-      },
+      target_id: target.id,
+      tracking_result: savedTrackingResult, // ini isi DB
     });
   } catch (err) {
     return res.status(500).json({
@@ -264,13 +271,14 @@ async function runTrackingSocial(req, res) {
 }
 
 async function runTrackingSocialBatch(req, res) {
+  console.log("start tracking with batch");
   try {
     const limit = parseInt(req.query.limit || "10");
     const delay = parseInt(req.query.delay || "5000"); // ms
 
-    if (limit < 1 || limit > 1000) {
+    if (limit < 1 || limit > 10000) {
       return res.status(400).json({
-        detail: "limit harus 1 - 1000",
+        detail: "limit harus 1 - 10000",
       });
     }
 
@@ -292,16 +300,16 @@ async function runTrackingSocialBatch(req, res) {
 
     for (const alumni of alumniList) {
       console.log(`🚀 Tracking alumni: ${alumni.id} - ${alumni.nama}`);
-      
+      let scraper_output;
+
       try {
         console.log("START SCRAPING:", alumni.nama);
-        const scraper_output = await searchWithEnrichment(alumni.nama);
+        scraper_output = await searchWithEnrichment(alumni.nama);
 
         console.log("SCRAPER OUTPUT:", scraper_output);
         if (!scraper_output) {
           throw new Error("Scraper gagal total (null response)");
         }
-        
 
         const results = scraper_output.results || {};
         const linkedinResults = results.linkedin || [];
@@ -342,7 +350,7 @@ async function runTrackingSocialBatch(req, res) {
 
             // experience
             if (bestLinkedin.rich_data?.cards?.experience?.length) {
-              const exp = topLinkedin?.rich_data?.cards?.experience?.[0];
+              const exp = bestLinkedin?.rich_data?.cards?.experience?.[0];
               newTrackingResult.posisi_kerja = exp.title || null;
               newTrackingResult.tempat_kerja = exp.company || null;
             }
@@ -375,7 +383,7 @@ async function runTrackingSocialBatch(req, res) {
 
         alumni.is_tracked = true;
         await alumni.save();
-        
+
         success++;
         logs.push({
           id: alumni.id,
@@ -390,6 +398,8 @@ async function runTrackingSocialBatch(req, res) {
           status: "failed",
           error: err.message,
         });
+        console.error("SCRAPER CRASH:", err);
+        throw err;
       }
 
       // delay biar gak brutal

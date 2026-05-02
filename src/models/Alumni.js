@@ -5,7 +5,7 @@ const Alumni = sequelize.define(
   "Alumni",
   {
     id: { type: DataTypes.INTEGER, autoIncrement: true, primaryKey: true },
-    nim: { type: DataTypes.STRING(50), allowNull: false, unique: true },
+    nim: { type: DataTypes.STRING(50), allowNull: false },
     nama: { type: DataTypes.STRING(200), allowNull: false },
     tahun_masuk: { type: DataTypes.INTEGER, allowNull: true },
     tanggal_lulus: { type: DataTypes.STRING(50), allowNull: true },

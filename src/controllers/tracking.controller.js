@@ -274,11 +274,11 @@ async function runTrackingSocialBatch(req, res) {
   console.log("start tracking with batch");
   try {
     const limit = parseInt(req.query.limit || "10");
-    const delay = parseInt(req.query.delay || "5000"); // ms
+    const delay = parseInt(req.query.delay || "500"); // ms
 
-    if (limit < 1 || limit > 10000) {
+    if (limit < 1 || limit > 100000) {
       return res.status(400).json({
-        detail: "limit harus 1 - 10000",
+        detail: "limit harus 1 - 100000",
       });
     }
 
@@ -399,7 +399,8 @@ async function runTrackingSocialBatch(req, res) {
           error: err.message,
         });
         console.error("SCRAPER CRASH:", err);
-        throw err;
+        // throw err;
+        continue;
       }
 
       // delay biar gak brutal

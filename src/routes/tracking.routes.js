@@ -19,8 +19,8 @@ router.get("/track/:target_id", runTracking);
 router.post("/track-all", runTrackingAll);
 
 // SOCIAL TRACKING
-router.post("/track/social/:target_id", runTrackingSocial);
 router.post("/track/social/batch", runTrackingSocialBatch);
+router.post("/track/social/:target_id", runTrackingSocial);
 
 router.get("/export", getExportData);
 

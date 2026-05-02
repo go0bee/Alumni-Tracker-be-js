@@ -62,11 +62,11 @@ async function browserSearch(page, query, platform) {
   });
 
   // human-ish behavior
-  await page.waitForTimeout(random(1000, 2000));
-  await page.mouse.move(random(200, 800), random(200, 500));
-  await page.waitForTimeout(random(500, 1500));
-  await page.mouse.wheel(0, random(500, 1200));
-  await page.waitForTimeout(random(1000, 2000));
+  // await page.waitForTimeout(random(1000, 2000));
+  // await page.mouse.move(random(200, 800), random(200, 500));
+  // await page.waitForTimeout(random(500, 1500));
+  // await page.mouse.wheel(0, random(500, 1200));
+  // await page.waitForTimeout(random(1000, 2000));
 
   const results = await page.$$eval("article", (nodes) =>
     nodes
@@ -170,7 +170,7 @@ async function scrapeLinkedInProfile(context, url) {
       return null;
     }
 
-    await page.waitForTimeout(random(3000, 6000));
+    await page.waitForTimeout(random(500, 500));
 
     const data = await page.evaluate(() => {
       const getMeta = (prop) =>
@@ -201,24 +201,38 @@ async function scrapeLinkedInProfile(context, url) {
       const parseExperience = (section) => {
         if (!section) return [];
 
-        return Array.from(
-          section.querySelectorAll(
-            "li.experience-item, li.experience-group-position",
-          ),
-        )
+        return Array.from(section.querySelectorAll("li.experience-item"))
           .map((el) => {
             const title = normalize(
               el.querySelector(".experience-item__title")?.innerText,
             );
+
             const company = normalize(
               el.querySelector(".experience-item__subtitle")?.innerText,
             );
+
             const date = normalize(el.querySelector(".date-range")?.innerText);
 
-            return { title, company, date };
+            // lokasi (kadang ada, kadang ghosting)
+            const location = normalize(
+              el.querySelectorAll(".experience-item__meta-item")[1]?.innerText,
+            );
+
+            // deskripsi / jobdesk
+            const description = normalize(
+              el.querySelector(".show-more-less-text__text--less")?.innerText,
+            );
+
+            return {
+              title,
+              company,
+              date,
+              location,
+              description,
+            };
           })
           .filter((x) => x.title || x.company)
-          .slice(0, 5);
+          .slice(0, 3);
       };
 
       const parseEducation = (section) => {
@@ -226,19 +240,37 @@ async function scrapeLinkedInProfile(context, url) {
 
         return Array.from(section.querySelectorAll("li.education__list-item"))
           .map((el) => {
-            const school =
-              el.querySelector("h3 a span")?.innerText?.trim() ||
-              el.querySelector("h3")?.innerText?.trim() ||
-              "";
+            // school
+            const school = normalize(el.querySelector("h3 span")?.innerText);
 
-            const date =
-              el.querySelector(".date-range")?.innerText?.trim() || "";
+            // ambil semua span di h4 (degree, field, kadang GPA)
+            const spans = el.querySelectorAll("h4 span");
 
-            return { school, date };
+            const degree = normalize(spans[0]?.innerText);
+            const field = normalize(spans[1]?.innerText);
+            const extra = normalize(spans[2]?.innerText); // kadang GPA, kadang kosong
+
+            const date = normalize(el.querySelector(".date-range")?.innerText);
+
+            const description = normalize(
+              el.querySelector(".show-more-less-text__text--less")?.innerText,
+            );
+
+            return {
+              school,
+              degree,
+              field,
+              extra,
+              date,
+              description,
+            };
           })
           .filter((x) => x.school)
-          .slice(0, 5);
+          .slice(0, 3);
       };
+
+      console.log("exp: ", expSection);
+      console.log("edu: ", eduSection);
 
       return {
         experience: parseExperience(expSection),

@@ -10,7 +10,7 @@ const { chromium } = require("playwright");
   await page.goto("https://www.linkedin.com");
 
   console.log("👉 Login manual dulu (60 detik)...");
-  await page.waitForTimeout(60000);
+  await page.waitForTimeout(90000);
 
   const sessionPath = path.join(__dirname, "../sessions/linkedinSession.json");
 
